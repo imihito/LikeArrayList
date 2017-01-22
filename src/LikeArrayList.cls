@@ -210,7 +210,7 @@ End Sub
 
 Public Function Clone() As LikeArrayList
     Dim tmp As LikeArrayList:    Set tmp = New LikeArrayList
-    Call tmp.InitInternalArray(Me.ToArray)
+    Call tmp.InitInternalArray(Me.ToArray, False)
     tmp.Capacity = Me.Capacity
     Set Clone = tmp
 End Function
