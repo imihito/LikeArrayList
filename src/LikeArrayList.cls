@@ -187,7 +187,12 @@ Public Sub AddObjRange(ByRef List As Variant)
 End Sub
 
 
-Public Function BinarySearch(ByRef Item As Variant) As Long
+Public Function BinarySearch( _
+        ByRef Item As Variant, _
+        Optional ObjMemberName As String = "", _
+        Optional ProcType As VBA.VbCallType = VbCallType.VbGet _
+    ) As Long
+    
     Call ClsErrRaise(iceUnimplemented, "BinarySearch")
 End Function
 
@@ -212,14 +217,14 @@ End Function
 
 
 Public Function Contains(ByRef Item As Variant) As Boolean
-    Call ClsErrRaise(iceUnimplemented, "Contains")
     On Error GoTo Fail
         If VBA.IsObject(Item) Then
-            
+            Let Contains = (ScanByObject(Item) <> LBound(clsArray) - 1)
         ElseIf VBA.IsArray(Item) Then
-            
+            'Incompatible
+            Call ClsErrRaise(iceTypeMissMatch, "Contains")
         Else
-            
+            Let Contains = (ScanByValue(Item) <> LBound(clsArray) - 1)
         End If
     On Error GoTo 0
 Exit Function
@@ -237,11 +242,32 @@ End Sub
 
 
 Public Function IndexOf(ByRef Item As Variant) As Long
-    Call ClsErrRaise(iceUnimplemented, "IndexOf")
+    On Error GoTo Fail
+        If VBA.IsObject(Item) Then
+            Let IndexOf = ScanByObject(Item)
+        ElseIf VBA.IsArray(Item) Then
+            'Incompatible
+            Call ClsErrRaise(iceTypeMissMatch, "IndexOf")
+        Else
+            Let IndexOf = ScanByValue(Item)
+        End If
+    On Error GoTo 0
+Exit Function
+
+Fail:
+    On Error GoTo 0
+    Let IndexOf = LBound(clsArray) - 1
 End Function
 
 Public Sub Insert(Index As Long, ByRef Item As Variant)
-    Call ClsErrRaise(iceUnimplemented, "Insert")
+    Call Extend(clsIndex + 1)
+    Dim i As Long
+    For i = clsIndex To Index Step -1
+        Call AssignItem(clsArray(i), clsArray(i + 1))
+    Next i
+    
+    Call AssignItem(Item, clsArray(Index))
+    Let clsIndex = clsIndex + 1
 End Sub
 
 
@@ -296,6 +322,56 @@ Private Sub Extend(RequireIndex As Long)
     
     Let clsCapacity = nextUbound
 End Sub
+
+
+Private Function ScanByValue(Item As Variant) As Long
+    Dim i As Long
+    For i = LBound(clsArray) To UBound(clsArray)
+        Select Case True
+            Case VBA.IsObject(clsArray(i))
+            Case VBA.IsArray(clsArray(i))
+            Case Else
+                If Item = clsArray(i) Then
+                    Let ScanByValue = i
+                    Exit Function
+                End If
+        End Select
+    Next i
+    Let ScanByValue = LBound(clsArray) - 1
+End Function
+
+'Private Function ScanByArray(Item As Variant) As Long
+'    Dim i As Long
+'    For i = LBound(clsArray) To UBound(clsArray)
+'        On Error Resume Next
+'            Select Case True
+'                Case Not VBA.IsArray(clsArray(i))
+'
+'                Case Not (LBound(clsArray(i)) = LBound(Item))
+'                Case Not (UBound(clsArray(i)) = UBound(Item))
+'
+'                    If Item = clsArray(i) Then
+'                        Let ScanByObject = i
+'                        Exit Function
+'                    End If
+'            End Select
+'        On Error GoTo 0
+'    Next i
+'    Let ScanByObject = LBound(clsArray) - 1
+'End Function
+
+Private Function ScanByObject(Item As Variant) As Long
+    Dim i As Long
+    For i = LBound(clsArray) To UBound(clsArray)
+        If VBA.IsObject(clsArray(i)) Then
+            If Item Is clsArray(i) Then
+                Let ScanByObject = i
+                Exit Function
+            End If
+        End If
+    Next i
+    Let ScanByObject = LBound(clsArray) - 1
+End Function
 
 
 'ë„ì¸ãLèqä»ó™âªóp
