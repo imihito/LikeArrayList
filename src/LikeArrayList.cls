@@ -9,19 +9,27 @@ Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = False
 Option Explicit
 
+'ClsErrRaiseと関連。
 Private Enum InternalClsErr
     iceOutOfIndex = 9
     iceTypeMissMatch = 13
     iceUnimplemented = vbObjectError
-    
 End Enum
 
 Private clsArray As Variant
-Private clsInitialized As Boolean
-Private clsBase As Long
 
+'clsArrayが初期化されているかどうか
+Private clsArrayRedimed As Boolean
+
+'基本的にはLbound(clsArray)と同等
+Private clsBase As Long 'Default = 1
+
+'基本的にはUbound(clsArray)と同等
 Private clsCapacity As Long
-Private clsArrayIndex As Long
+
+'clsArrayの使用中の添え字
+Private clsIndex As Long
+
 
 '内部の配列の初期化
 Public Sub InitInternalArray(ByRef BaseArray As Variant, Optional TypeOnly As Boolean = True)
@@ -30,7 +38,7 @@ Public Sub InitInternalArray(ByRef BaseArray As Variant, Optional TypeOnly As Bo
     End If
     
     Let clsArray = BaseArray
-    Let clsInitialized = True
+    
     If TypeOnly Then
         Call Me.Clear(False)
         Exit Sub
@@ -39,15 +47,14 @@ Public Sub InitInternalArray(ByRef BaseArray As Variant, Optional TypeOnly As Bo
     On Error GoTo NotoInitArray
         Let clsBase = LBound(BaseArray)
         Let clsCapacity = UBound(BaseArray)
-        Let clsArrayIndex = clsCapacity
+        Let clsIndex = clsCapacity
     On Error GoTo 0
+    Let clsArrayRedimed = True
 Exit Sub
 
 NotoInitArray:
     On Error GoTo 0
-    Let clsBase = 1
-    Let clsCapacity = 0
-    Let clsArrayIndex = 0
+    Call Reset
 Exit Sub
 
 End Sub
@@ -59,7 +66,7 @@ End Property
 
 '紛らわしいですが、clsArrayで使用している最大Index。
 Property Get ArrayUBound() As Long
-    Let ArrayUBound = clsArrayIndex
+    Let ArrayUBound = clsIndex
 End Property
 
 
@@ -76,7 +83,7 @@ End Property
 
 '中の要素数と同等
 Public Property Get Count() As Long
-    Let Count = clsArrayIndex + 1 - clsBase
+    Let Count = clsIndex + 1 - clsBase
 End Property
 
 
@@ -109,38 +116,38 @@ End Property
 
 '値型かオブジェクト型かを自動判定。
 Public Sub Add(ByRef Item As Variant)
-    Call Extend(clsArrayIndex + 1)
-    Call AssignItem(Item, clsArray(clsArrayIndex + 1))
-    Let clsArrayIndex = clsArrayIndex + 1   '追加失敗に備え、追加が終わってからインクリメント。
+    Call Extend(clsIndex + 1)
+    Call AssignItem(Item, clsArray(clsIndex + 1))
+    Let clsIndex = clsIndex + 1   '追加失敗に備え、追加が終わってからインクリメント。
 End Sub
 
 '値型か、オブジェクト型か決まっている場合は以下のメソッド。
-Public Sub AddValue(ByRef Item As Variant)
-    Call Extend(clsArrayIndex + 1)
-    Let clsArray(clsArrayIndex + 1) = Item
-    Let clsArrayIndex = clsArrayIndex + 1
+Public Sub AddVal(ByRef Item As Variant)
+    Call Extend(clsIndex + 1)
+    Let clsArray(clsIndex + 1) = Item
+    Let clsIndex = clsIndex + 1
 End Sub
 
-Public Sub AddObject(ByRef Item As Object)
-    Call Extend(clsArrayIndex + 1)
-    Set clsArray(clsArrayIndex + 1) = Item
-    Let clsArrayIndex = clsArrayIndex + 1
+Public Sub AddObj(ByRef Item As Object)
+    Call Extend(clsIndex + 1)
+    Set clsArray(clsIndex + 1) = Item
+    Let clsIndex = clsIndex + 1
 End Sub
 
 
 '値型かオブジェクト型かを自動判定。
 Public Sub AddRange(ByRef List As Variant)
-    Call Extend(clsArrayIndex + ListLength(List))
+    Call Extend(clsIndex + ListLength(List))
     
     Dim i As Long
     Dim tVar As Variant
     
     For Each tVar In List
         i = i + 1
-        Call AssignItem(tVar, clsArray(clsArrayIndex + i))
+        Call AssignItem(tVar, clsArray(clsIndex + i))
     Next tVar
     
-    Let clsArrayIndex = clsArrayIndex + i
+    Let clsIndex = clsIndex + i
 End Sub
 
 Private Function ListLength(List As Variant) As Long
@@ -151,32 +158,32 @@ Private Function ListLength(List As Variant) As Long
     End If
 End Function
 
-Public Sub AddValueRange(ByRef List As Variant)
-    Call Extend(clsArrayIndex + ListLength(List))
+Public Sub AddValRange(ByRef List As Variant)
+    Call Extend(clsIndex + ListLength(List))
     
     Dim i As Long
     Dim tVar As Variant
     
     For Each tVar In List
         i = i + 1
-        Let clsArray(clsArrayIndex + i) = tVar
+        Let clsArray(clsIndex + i) = tVar
     Next tVar
     
-    Let clsArrayIndex = clsArrayIndex + i
+    Let clsIndex = clsIndex + i
 End Sub
 
-Public Sub AddObjectRange(ByRef List As Variant)
-    Call Extend(clsArrayIndex + ListLength(List))
+Public Sub AddObjRange(ByRef List As Variant)
+    Call Extend(clsIndex + ListLength(List))
     
     Dim i As Long
     Dim tVar As Variant
     
     For Each tVar In List
         i = i + 1
-        Set clsArray(clsArrayIndex + i) = tVar
+        Set clsArray(clsIndex + i) = tVar
     Next tVar
     
-    Let clsArrayIndex = clsArrayIndex + i
+    Let clsIndex = clsIndex + i
 End Sub
 
 
@@ -188,10 +195,10 @@ End Function
 Public Sub Clear(Optional Force As Boolean = False)
     If Force Then
         clsArray = Empty
-        clsInitialized = False
     Else
         Erase clsArray  '配列の型情報は維持される。
     End If
+    clsArrayRedimed = False
     Call Reset
 End Sub
 
@@ -223,7 +230,7 @@ End Function
 
 Public Sub CopyTo(ByRef CopiedArray As Variant)
     Dim i As Long
-    For i = clsBase To clsArrayIndex
+    For i = clsBase To clsIndex
         Call AssignItem(clsArray(i), CopiedArray(i))
     Next i
 End Sub
@@ -240,14 +247,15 @@ End Sub
 
 Public Function ToArray() As Variant
     Dim tmp As Variant
-    If clsInitialized Then
+    If clsArrayRedimed Then
         Let tmp = clsArray
-        ReDim Preserve tmp(clsBase To clsArrayIndex)
+        ReDim Preserve tmp(clsBase To clsIndex)
     Else
         Let tmp = Array()
     End If
     Let ToArray = tmp
 End Function
+
 
 Public Function ToString() As String
     Let ToString = VBA.TypeName(Me) & "(Of " & VBA.TypeName(clsArray) & ")"
@@ -265,27 +273,32 @@ End Function
 
 
 Public Sub TrimToSize()
-    If clsInitialized Then
-        ReDim Preserve clsArray(clsBase To clsArrayIndex)
-    End If
+    If clsArrayRedimed Then ReDim Preserve clsArray(clsBase To clsIndex)
 End Sub
+
+
 
 Private Sub Extend(RequireIndex As Long)
     If RequireIndex <= clsCapacity Then Exit Sub
+    
     Dim nextUbound As Long
     If RequireIndex > clsCapacity * 2 Then
         nextUbound = RequireIndex
     Else
         nextUbound = clsCapacity * 2
     End If
-    If clsInitialized Then
+    If clsArrayRedimed Then
         ReDim Preserve clsArray(clsBase To nextUbound)
     Else
         ReDim clsArray(clsBase To nextUbound)
+        clsArrayRedimed = True
     End If
+    
     Let clsCapacity = nextUbound
 End Sub
 
+
+'代入記述簡略化用
 Private Sub AssignItem(ByRef InputItem As Variant, ByRef OutputItem As Variant)
     If VBA.IsObject(InputItem) Then
         Set OutputItem = InputItem
@@ -294,10 +307,10 @@ Private Sub AssignItem(ByRef InputItem As Variant, ByRef OutputItem As Variant)
     End If
 End Sub
 
-
+'配列添え字関連変数のリセット
 Private Sub Reset()
     Let clsBase = 1
-    Let clsArrayIndex = 0
+    Let clsIndex = 0
     Let clsCapacity = 0
 End Sub
 
@@ -312,7 +325,7 @@ End Sub
 
 Private Sub Class_Initialize()
     Call Reset
-    Let clsInitialized = False
+    Let clsArrayRedimed = False
 End Sub
 
 Private Sub Class_Terminate()
