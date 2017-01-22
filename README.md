@@ -3,6 +3,9 @@ VBA Array WrapperClass Like .NET ArrayList.
 
 .NETのArrayList風のメソッドを持つ、VBAの配列ラッパークラスです。  
 最低限は使えるかと思いますが、未実装のメソッドも多いです。
+
+[ArrayList クラス](https://msdn.microsoft.com/ja-jp/library/system.collections.arraylist(v=vs.110).aspx "ArrayList クラス")
+
 # 特徴
 
 + VBAでよく使われるコレクションとの対応をとるため、基本的には添え字は1から始まります。
