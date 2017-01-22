@@ -9,7 +9,12 @@ Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = False
 Option Explicit
 
-'ClsErrRaiseと関連。
+'Long型の最大・最小値
+'Optional引数の未指定判定に使用。
+Private Const LongMaxValue& = 2147483647
+Private Const LongMinValue& = -2147483647 - 1
+
+'エラーメッセージ用。素のままだとわかりにくかったため。
 Private Enum InternalClsErr
     iceOutOfIndex = 9
     iceTypeMissMatch = 13
@@ -33,9 +38,7 @@ Private clsIndex As Long
 
 '内部の配列の初期化
 Public Sub InitInternalArray(ByRef BaseArray As Variant, Optional TypeOnly As Boolean = True)
-    If Not VBA.IsArray(BaseArray) Then
-        Call Err.Raise(iceTypeMissMatch)
-    End If
+    If Not VBA.IsArray(BaseArray) Then Call ClsErrRaise(iceTypeMissMatch, "InitInternalArray")
     
     Let clsArray = BaseArray
     
@@ -44,7 +47,7 @@ Public Sub InitInternalArray(ByRef BaseArray As Variant, Optional TypeOnly As Bo
         Exit Sub
     End If
     
-    On Error GoTo NotoInitArray
+    On Error GoTo NotInitArray
         Let clsBase = LBound(BaseArray)
         Let clsCapacity = UBound(BaseArray)
         Let clsIndex = clsCapacity
@@ -52,7 +55,7 @@ Public Sub InitInternalArray(ByRef BaseArray As Variant, Optional TypeOnly As Bo
     Let clsArrayRedimed = True
 Exit Sub
 
-NotoInitArray:
+NotInitArray:
     On Error GoTo 0
     Call Reset
 Exit Sub
@@ -65,6 +68,7 @@ Property Get ArrayLBound() As Long
 End Property
 
 '紛らわしいですが、clsArrayで使用している最大Index。
+'clsBase = 1のときCountと同じ。
 Property Get ArrayUBound() As Long
     Let ArrayUBound = clsIndex
 End Property
@@ -89,46 +93,51 @@ End Property
 
 'Itemは値型かオブジェクト型かを自動判定。
 'ItemAs～は判定をしない（その分パフォーマンス改善）。
-Public Property Get Item(ByVal Index As Long) As Variant
+Public Property Get Item(Index As Long) As Variant
 Attribute Item.VB_UserMemId = 0
+    If Index > clsIndex Then Call ClsErrRaise(iceOutOfIndex, "Item")
     Call AssignItem(clsArray(Index), Item)
 End Property
 
 
-Public Property Let Item(ByVal Index As Long, ByVal Value As Variant)
+Public Property Let Item(Index As Long, Value As Variant)
+    If Index > clsIndex Then Call ClsErrRaise(iceOutOfIndex, "Item")
     Let clsArray(Index) = Value
 End Property
 
-Public Property Get ItemAsValue(ByVal Index As Long) As Variant
+Public Property Get ItemAsValue(Index As Long) As Variant
+    If Index > clsIndex Then Call ClsErrRaise(iceOutOfIndex, "ItemAsValue")
     Let ItemAsValue = clsArray(Index)
 End Property
 
 
-Public Property Set Item(ByVal Index As Long, ByVal Value As Variant)
+Public Property Set Item(Index As Long, Value As Variant)
+    If Index > clsIndex Then Call ClsErrRaise(iceOutOfIndex, "Item")
     Set clsArray(Index) = Value
 End Property
 
-Public Property Get ItemAsObject(ByVal Index As Long) As Object
+Public Property Get ItemAsObject(Index As Long) As Object
+    If Index > clsIndex Then Call ClsErrRaise(iceOutOfIndex, "ItemAsObject")
     Set ItemAsObject = clsArray(Index)
 End Property
 
 
 
 '値型かオブジェクト型かを自動判定。
-Public Sub Add(ByRef Item As Variant)
+Public Sub Add(Item As Variant)
     Call Extend(clsIndex + 1)
     Call AssignItem(Item, clsArray(clsIndex + 1))
     Let clsIndex = clsIndex + 1   '追加失敗に備え、追加が終わってからインクリメント。
 End Sub
 
 '値型か、オブジェクト型か決まっている場合は以下のメソッド。
-Public Sub AddVal(ByRef Item As Variant)
+Public Sub AddVal(Item As Variant)
     Call Extend(clsIndex + 1)
     Let clsArray(clsIndex + 1) = Item
     Let clsIndex = clsIndex + 1
 End Sub
 
-Public Sub AddObj(ByRef Item As Object)
+Public Sub AddObj(Item As Object)
     Call Extend(clsIndex + 1)
     Set clsArray(clsIndex + 1) = Item
     Let clsIndex = clsIndex + 1
@@ -136,7 +145,7 @@ End Sub
 
 
 '値型かオブジェクト型かを自動判定。
-Public Sub AddRange(ByRef List As Variant)
+Public Sub AddRange(List As Variant)
     Call Extend(clsIndex + ListLength(List))
     
     Dim i As Long
@@ -158,7 +167,7 @@ Private Function ListLength(List As Variant) As Long
     End If
 End Function
 
-Public Sub AddValRange(ByRef List As Variant)
+Public Sub AddValRange(List As Variant)
     Call Extend(clsIndex + ListLength(List))
     
     Dim i As Long
@@ -172,7 +181,7 @@ Public Sub AddValRange(ByRef List As Variant)
     Let clsIndex = clsIndex + i
 End Sub
 
-Public Sub AddObjRange(ByRef List As Variant)
+Public Sub AddObjRange(List As Variant)
     Call Extend(clsIndex + ListLength(List))
     
     Dim i As Long
@@ -188,7 +197,7 @@ End Sub
 
 
 Public Function BinarySearch( _
-        ByRef Item As Variant, _
+         Item As Variant, _
         Optional ObjMemberName As String = "", _
         Optional ProcType As VBA.VbCallType = VbCallType.VbGet _
     ) As Long
@@ -209,27 +218,21 @@ End Sub
 
 
 Public Function Clone() As LikeArrayList
-    Dim tmp As LikeArrayList:    Set tmp = New LikeArrayList
+    Dim tmp As LikeArrayList: Set tmp = New LikeArrayList
     Call tmp.InitInternalArray(Me.ToArray, False)
     tmp.Capacity = Me.Capacity
     Set Clone = tmp
 End Function
 
 
-Public Function Contains(ByRef Item As Variant) As Boolean
-    On Error GoTo Fail
-        If VBA.IsObject(Item) Then
-            Let Contains = (ScanByObject(Item) <> LBound(clsArray) - 1)
-        ElseIf VBA.IsArray(Item) Then
-            'Incompatible
-            Call ClsErrRaise(iceTypeMissMatch, "Contains")
-        Else
-            Let Contains = (ScanByValue(Item) <> LBound(clsArray) - 1)
-        End If
-    On Error GoTo 0
-Exit Function
-
-Fail:
+Public Function Contains( _
+        ByRef Item As Variant, _
+        Optional StartIndex As Long = LongMaxValue, _
+        Optional LastIndex As Long = LongMinValue _
+    ) As Boolean
+    
+    Let Contains = ScanCommon(Item, StartIndex, LastIndex) >= clsBase
+    
 End Function
 
 
@@ -241,22 +244,14 @@ Public Sub CopyTo(ByRef CopiedArray As Variant)
 End Sub
 
 
-Public Function IndexOf(ByRef Item As Variant) As Long
-    On Error GoTo Fail
-        If VBA.IsObject(Item) Then
-            Let IndexOf = ScanByObject(Item)
-        ElseIf VBA.IsArray(Item) Then
-            'Incompatible
-            Call ClsErrRaise(iceTypeMissMatch, "IndexOf")
-        Else
-            Let IndexOf = ScanByValue(Item)
-        End If
-    On Error GoTo 0
-Exit Function
-
-Fail:
-    On Error GoTo 0
-    Let IndexOf = LBound(clsArray) - 1
+Public Function IndexOf( _
+        ByRef Item As Variant, _
+        Optional StartIndex As Long = LongMaxValue, _
+        Optional LastIndex As Long = LongMinValue _
+    ) As Long
+    
+    Let IndexOf = ScanCommon(Item, StartIndex, LastIndex)
+    
 End Function
 
 Public Sub Insert(Index As Long, ByRef Item As Variant)
@@ -291,7 +286,7 @@ Public Function ArrayType() As String
     Dim tName As String:    tName = VBA.TypeName(clsArray)
     Select Case tName
         Case VBA.TypeName(Empty)
-            Let ArrayType = tName
+            Let ArrayType = ""
         Case Else
             Let ArrayType = VBA.Left$(tName, VBA.Len(tName) - 2)
     End Select
@@ -323,10 +318,31 @@ Private Sub Extend(RequireIndex As Long)
     Let clsCapacity = nextUbound
 End Sub
 
+Private Function ScanCommon(Item As Variant, ByVal LbIndex As Long, ByVal UbIndex As Long) As Long
+    If LbIndex = LongMaxValue Then LbIndex = clsBase
+    If UbIndex = LongMinValue Then UbIndex = clsIndex
+    
+    On Error GoTo Fail
+        If VBA.IsObject(Item) Then
+            Let ScanCommon = ScanByObject(Item, LbIndex, UbIndex)
+        ElseIf VBA.IsArray(Item) Then
+            'Incompatible
+            Call ClsErrRaise(iceTypeMissMatch, "")
+        Else
+            Let ScanCommon = ScanByValue(Item, LbIndex, UbIndex)
+        End If
+    On Error GoTo 0
+Exit Function
 
-Private Function ScanByValue(Item As Variant) As Long
+Fail:
+    On Error GoTo 0
+    Let ScanCommon = clsBase - 1
+End Function
+
+
+Private Function ScanByValue(Item As Variant, LbIndex As Long, UbIndex As Long) As Long
     Dim i As Long
-    For i = LBound(clsArray) To UBound(clsArray)
+    For i = LbIndex To UbIndex Step 1
         Select Case True
             Case VBA.IsObject(clsArray(i))
             Case VBA.IsArray(clsArray(i))
@@ -337,7 +353,7 @@ Private Function ScanByValue(Item As Variant) As Long
                 End If
         End Select
     Next i
-    Let ScanByValue = LBound(clsArray) - 1
+    Let ScanByValue = clsBase - 1
 End Function
 
 'Private Function ScanByArray(Item As Variant) As Long
@@ -360,9 +376,9 @@ End Function
 '    Let ScanByObject = LBound(clsArray) - 1
 'End Function
 
-Private Function ScanByObject(Item As Variant) As Long
+Private Function ScanByObject(Item As Variant, LbIndex As Long, UbIndex As Long) As Long
     Dim i As Long
-    For i = LBound(clsArray) To UBound(clsArray)
+    For i = LbIndex To UbIndex Step 1
         If VBA.IsObject(clsArray(i)) Then
             If Item Is clsArray(i) Then
                 Let ScanByObject = i
@@ -370,7 +386,7 @@ Private Function ScanByObject(Item As Variant) As Long
             End If
         End If
     Next i
-    Let ScanByObject = LBound(clsArray) - 1
+    Let ScanByObject = clsBase - 1
 End Function
 
 
@@ -402,8 +418,4 @@ End Sub
 Private Sub Class_Initialize()
     Call Reset
     Let clsArrayRedimed = False
-End Sub
-
-Private Sub Class_Terminate()
-    Erase clsArray
 End Sub
